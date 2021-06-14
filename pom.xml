@@ -46,24 +46,21 @@
             <version>1.0.0-alpha</version>
         </dependency>
         <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-cuda-9.1-platform</artifactId>
-            <version>1.0.0-alpha</version>
-        </dependency>
-        <dependency>
             <groupId>org.datavec</groupId>
             <artifactId>datavec-api</artifactId>
             <version>1.0.0-alpha</version>
         </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.nd4j/nd4j-backends -->
         <dependency>
             <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-backends</artifactId>
+            <artifactId>nd4j-native</artifactId>
             <version>1.0.0-alpha</version>
-            <type>pom</type>
         </dependency>
-
+        <!-- https://mvnrepository.com/artifact/org.javatuples/javatuples -->
+        <dependency>
+            <groupId>org.javatuples</groupId>
+            <artifactId>javatuples</artifactId>
+            <version>1.2</version>
+        </dependency>
 
     </dependencies>
 

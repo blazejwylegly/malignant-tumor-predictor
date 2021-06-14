@@ -2,77 +2,64 @@ package pl.polsl.tumorpredictor.data;
 
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.datavec.api.records.reader.RecordReader;
 import org.datavec.api.records.reader.impl.csv.CSVRecordReader;
 import org.datavec.api.split.FileSplit;
-import org.datavec.api.writable.Writable;
-import org.deeplearning4j.ui.standalone.ClassPathResource;
+import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
+import org.eclipse.collections.api.tuple.Pair;
+import org.eclipse.collections.impl.tuple.Tuples;
+import org.nd4j.linalg.dataset.DataSet;
+import org.nd4j.linalg.dataset.SplitTestAndTrain;
+import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 @NoArgsConstructor
 @AllArgsConstructor
+@Slf4j
 public class MammogramDataSetReader {
 
     private RecordReader recordReader;
 
-    private static final int numClasses = 2;
-    private static final int BI_RADS_INDEX = 0;
-    private static final int AGE_INDEX = 1;
-    private static final int SHAPE_INDEX = 2;
-    private static final int MARGIN_INDEX = 3;
-    private static final int DENSITY_INDEX = 4;
-    private static final int SEVERITY_INDEX = 5;
+    private static final int NUM_LINES_TO_SKIP = 0;
+    private static final char DELIMITER = ',';
 
-    public MammogramDataSet readDatasetFile(String filename)
+    private static final int LABEL_INDEX = 5;
+    private static final int NUM_CLASSES = 2;
+    private static final int BATCH_SIZE = 829;
+
+    public Pair<DataSet, DataSet> readDatasetFile(String filename, double ratio)
             throws IOException, InterruptedException {
-        initializeReader(filename);
-        List<List<Writable>> dataSet = retrieveCsvDataset();
-        return createMammogramDataSet(dataSet);
-    }
-
-    private MammogramDataSet createMammogramDataSet(List<List<Writable>> dataSet) {
-        List<DataEntry> dataEntries = dataSet.stream()
-                .map(this::mapSingleSliceToDataEntry)
-                .collect(Collectors.toList());
-        return MammogramDataSet.of(dataEntries);
-    }
-
-    private DataEntry mapSingleSliceToDataEntry(List<Writable> singleRecord) {
-        return DataEntry.builder()
-                .bi_rads(getDoubleOrNull(singleRecord, BI_RADS_INDEX))
-                .age(getDoubleOrNull(singleRecord, AGE_INDEX))
-                .shape(getDoubleOrNull(singleRecord, SHAPE_INDEX))
-                .massMargin(getDoubleOrNull(singleRecord, MARGIN_INDEX))
-                .massDensity(getDoubleOrNull(singleRecord, DENSITY_INDEX))
-                .severity(getDoubleOrNull(singleRecord, SEVERITY_INDEX))
-                .build();
-    }
-
-    private Double getDoubleOrNull(List<Writable> singleRecord, int index) {
-        try {
-            return singleRecord.get(index).toDouble();
-        } catch (NumberFormatException ex) {
-            return null;
+        if((ratio >= 0) && (ratio <= 1)) {
+            initializeReader(filename);
+            return retrieveShuffledDataSet(ratio);
+        } else {
+            throw new RuntimeException("Invalid split ratio!");
         }
     }
 
-    private List<List<Writable>> retrieveCsvDataset() {
-        List<List<Writable>> records = new ArrayList<>();
-        while(recordReader.hasNext()) {
-            records.add(recordReader.next());
-        }
-        return records;
+    private Pair<DataSet, DataSet> retrieveShuffledDataSet(double ratio) {
+        DataSetIterator iterator = new RecordReaderDataSetIterator(
+                recordReader, BATCH_SIZE, LABEL_INDEX, NUM_CLASSES
+        );
+        DataSet dataSet = iterator.next();
+        dataSet.shuffle();
+        SplitTestAndTrain testAndTrain = dataSet.splitTestAndTrain(ratio);
+
+        DataSet trainingDataset = testAndTrain.getTrain();
+        log.info("Successfully populated training data set with {} entries", trainingDataset.asList().size());
+        DataSet testingDataset = testAndTrain.getTest();
+        log.info("Successfully populated testing data set with {} entries", testingDataset.asList().size());
+
+        return Tuples.pair(trainingDataset, testingDataset);
     }
 
     private void initializeReader(String datasetFileName) throws IOException, InterruptedException {
-        recordReader = new CSVRecordReader(1, ",");
-        recordReader.initialize(new FileSplit(
-                new ClassPathResource(datasetFileName).getFile()));
+        recordReader = new CSVRecordReader(NUM_LINES_TO_SKIP, DELIMITER);
+        recordReader.initialize(new FileSplit(new File(datasetFileName)));
     }
 }
