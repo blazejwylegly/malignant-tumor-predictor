@@ -2,18 +2,16 @@ package pl.polsl.tumorpredictor.prediction;
 
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.deeplearning4j.eval.Evaluation;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
-import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
-import org.eclipse.collections.api.tuple.Pair;
-import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.DataNormalization;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerStandardize;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import pl.polsl.tumorpredictor.data.MammogramDataSetReader;
+import pl.polsl.tumorpredictor.network.NeuralNetMeta;
 import pl.polsl.tumorpredictor.network.NeuralNetBuilder;
+import pl.polsl.tumorpredictor.reporting.ReportingTool;
 
 import java.io.IOException;
 
@@ -21,44 +19,63 @@ import java.io.IOException;
 @NoArgsConstructor
 @Component
 public class TumorPredictor {
-    private static final String DATASET_FILENAME = "src/main/resources/mammographic_masses.csv";
+    private static final String TRAINING_DATASET_CSV = "src/main/resources/dataset_training.csv";
+    private static final String TESTING_DATASET_CSV = "src/main/resources/dataset_testing.csv";
 
     private MammogramDataSetReader dataSetRetriever;
     private DataSet trainingDataSet;
     private DataSet testingDataSet;
 
     private MultiLayerNetwork network;
+    private NeuralNetMeta config;
+    private ReportingTool reportingTool;
 
     @Autowired
-    public TumorPredictor(MammogramDataSetReader dataSetRetriever) {
+    public TumorPredictor(MammogramDataSetReader dataSetRetriever,
+                          NeuralNetMeta config,
+                          ReportingTool reportingTool) {
         this.dataSetRetriever = dataSetRetriever;
+        this.config = config;
+        this.reportingTool = reportingTool;
     }
 
-    public void predict() {
+    public void predict() throws IOException {
         setup();
-        trainNetwork();
-        evaluateNetwork();
+        trainNetworkAndCollectResults();
     }
 
-    private void trainNetwork() {
-        network.setListeners(new ScoreIterationListener(50));
-        for (int i = 0; i < 20000; i++) {
+    private void trainNetworkAndCollectResults() throws IOException {
+        for (int i = 1; i <= 250000; i++) {
             network.fit(trainingDataSet);
+            if (i % 1000 == 0) {
+                log.info("Current iteration " + i);
+                reportingTool.generatePartialReport(
+                        network, trainingDataSet, i
+                );
+            }
         }
-    }
-
-    private void evaluateNetwork() {
-        //evaluate the model on the test set
-        Evaluation eval = new Evaluation(3);
-        INDArray output = network.output(testingDataSet.getFeatures());
-        eval.eval(testingDataSet.getLabels(), output);
-        log.info(eval.stats());
+        reportingTool.flush("results.csv");
     }
 
     private void setup() {
+        setupDataSets();
+        setupNetwork();
+    }
+
+    private void setupDataSets() {
         tryToInitializeDataSet();
         normalizeDataSets();
-        this.network = NeuralNetBuilder.createNetwork();
+    }
+
+    private void tryToInitializeDataSet() {
+        try {
+            this.trainingDataSet = dataSetRetriever.readDatasetFile(TRAINING_DATASET_CSV);
+            this.testingDataSet = dataSetRetriever.readDatasetFile(TESTING_DATASET_CSV);
+        } catch (IOException | InterruptedException e) {
+            log.error("Error occurred while initializing data set! Terminating application...");
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 
     private void normalizeDataSets() {
@@ -69,17 +86,7 @@ public class TumorPredictor {
         normalizer.transform(testingDataSet);      //Apply normalization to the test data. This is using statistics calculated from the *training* set
     }
 
-    private void tryToInitializeDataSet() {
-
-        try {
-            Pair<DataSet, DataSet> dataSets =
-                    dataSetRetriever.readDatasetFile(DATASET_FILENAME, 0.7);
-            this.trainingDataSet = dataSets.getOne();
-            this.testingDataSet = dataSets.getTwo();
-        } catch (IOException | InterruptedException e) {
-            log.error("Error occurred while initializing data set! Terminating application...");
-            e.printStackTrace();
-            System.exit(1);
-        }
+    private void setupNetwork() {
+        this.network = NeuralNetBuilder.createNetwork(this.config);
     }
 }

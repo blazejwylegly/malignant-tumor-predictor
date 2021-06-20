@@ -32,30 +32,19 @@ public class MammogramDataSetReader {
     private static final int NUM_CLASSES = 2;
     private static final int BATCH_SIZE = 829;
 
-    public Pair<DataSet, DataSet> readDatasetFile(String filename, double ratio)
+    public DataSet readDatasetFile(String filename)
             throws IOException, InterruptedException {
-        if((ratio >= 0) && (ratio <= 1)) {
-            initializeReader(filename);
-            return retrieveShuffledDataSet(ratio);
-        } else {
-            throw new RuntimeException("Invalid split ratio!");
-        }
+        initializeReader(filename);
+        return retrieveShuffledDataSet();
     }
 
-    private Pair<DataSet, DataSet> retrieveShuffledDataSet(double ratio) {
+    private DataSet retrieveShuffledDataSet() {
         DataSetIterator iterator = new RecordReaderDataSetIterator(
                 recordReader, BATCH_SIZE, LABEL_INDEX, NUM_CLASSES
         );
         DataSet dataSet = iterator.next();
         dataSet.shuffle();
-        SplitTestAndTrain testAndTrain = dataSet.splitTestAndTrain(ratio);
-
-        DataSet trainingDataset = testAndTrain.getTrain();
-        log.info("Successfully populated training data set with {} entries", trainingDataset.asList().size());
-        DataSet testingDataset = testAndTrain.getTest();
-        log.info("Successfully populated testing data set with {} entries", testingDataset.asList().size());
-
-        return Tuples.pair(trainingDataset, testingDataset);
+       return dataSet;
     }
 
     private void initializeReader(String datasetFileName) throws IOException, InterruptedException {
